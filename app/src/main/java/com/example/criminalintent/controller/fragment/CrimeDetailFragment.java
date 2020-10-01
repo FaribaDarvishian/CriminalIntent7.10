@@ -18,6 +18,7 @@ import android.widget.CompoundButton;
 import android.widget.EditText;
 
 import androidx.annotation.Nullable;
+import androidx.core.app.ShareCompat;
 import androidx.fragment.app.Fragment;
 
 import com.example.criminalintent.R;
@@ -42,6 +43,9 @@ public class CrimeDetailFragment extends Fragment {
     private CheckBox mCheckBoxSolved;
     private Button mButtonSuspect;
     private Button mButtonReport;
+
+    private Button mButtonDial;
+    private Button mButtonCall;
 
     private Crime mCrime;
     private IRepository mRepository;
@@ -118,7 +122,9 @@ public class CrimeDetailFragment extends Fragment {
         } else if (requestCode == REQUEST_CODE_SELECT_CONTACT) {
             Uri contactUri = intent.getData();
 
-            String[] projection = new String[]{ContactsContract.Contacts.DISPLAY_NAME};
+            String[] projection =
+                    new String[]{ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME
+                            ,ContactsContract.CommonDataKinds.Phone.NUMBER};
             Cursor cursor = getActivity().getContentResolver().query(
                     contactUri,
                     projection,
@@ -132,12 +138,20 @@ public class CrimeDetailFragment extends Fragment {
             try {
                 cursor.moveToFirst();
 
-                String suspect = cursor.getString(0);
+                String suspect = cursor.getString(cursor.getColumnIndex(ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME));
+                String phoneNumber=cursor.getString(cursor.getColumnIndex(ContactsContract.CommonDataKinds.Phone.NUMBER));
+
                 mCrime.setSuspect(suspect);
+                mCrime.setPhoneNumber(phoneNumber);
                 mButtonSuspect.setText(suspect);
+                mRepository.updateCrime(mCrime);
+                mButtonDial.setText("Dial : " + mCrime.getPhoneNumber() );
+                mButtonCall.setText("Call : " + mCrime.getPhoneNumber() );
+                initViews();
             } finally {
                 cursor.close();
             }
+
         }
     }
 
@@ -147,6 +161,9 @@ public class CrimeDetailFragment extends Fragment {
         mCheckBoxSolved = view.findViewById(R.id.crime_solved);
         mButtonSuspect = view.findViewById(R.id.choose_suspect);
         mButtonReport = view.findViewById(R.id.send_report);
+
+        mButtonDial=view.findViewById(R.id.dial_suspect);
+        mButtonCall=view.findViewById(R.id.call_suspect);
     }
 
     private void initViews() {
@@ -156,6 +173,17 @@ public class CrimeDetailFragment extends Fragment {
 
         if (mCrime.getSuspect() != null)
             mButtonSuspect.setText(mCrime.getSuspect());
+        if(mCrime.getSuspect()!=null){
+            mButtonDial.setVisibility(View.VISIBLE);
+            mButtonCall.setVisibility(View.VISIBLE);
+
+            mButtonDial.setText("Dial : " + mCrime.getPhoneNumber() );
+            mButtonCall.setText("Call : " + mCrime.getPhoneNumber() );
+        }
+        else{
+            mButtonDial.setVisibility(View.INVISIBLE);
+            mButtonCall.setVisibility(View.INVISIBLE);
+        }
     }
 
     private void setListeners() {
@@ -215,6 +243,25 @@ public class CrimeDetailFragment extends Fragment {
                 shareReportIntent();
             }
         });
+        mButtonDial.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                Uri call = Uri.parse("tel:" + mCrime.getPhoneNumber());
+                Intent intent = new Intent(Intent.ACTION_DIAL,call);
+                startActivity(intent);
+            }
+        });
+
+        mButtonCall.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+
+                Intent intent = new Intent(Intent.ACTION_CALL);
+                intent.setData(Uri.parse("tel:" + mCrime.getPhoneNumber()));
+                startActivity(intent);
+
+            }
+        });
     }
 
     private void updateCrime() {
@@ -253,17 +300,31 @@ public class CrimeDetailFragment extends Fragment {
     }
 
     private void shareReportIntent() {
-        Intent sendIntent = new Intent(Intent.ACTION_SEND);
-        sendIntent.putExtra(Intent.EXTRA_TEXT, getReport());
-        sendIntent.putExtra(Intent.EXTRA_SUBJECT, getString(R.string.crime_report_subject));
-        sendIntent.setType("text/plain");
+        //share whit shareCompact
+        ShareCompat.IntentBuilder intentBuilder = ShareCompat.IntentBuilder.from(getActivity());
+        Intent intent = intentBuilder
+                .setType("text/plain")
+                .setText(getReport())
+                .setChooserTitle(getString(R.string.crime_report_subject))
+                .createChooserIntent();
 
-        Intent shareIntent =
-                Intent.createChooser(sendIntent, getString(R.string.send_report));
+        if (intent.resolveActivity(getActivity().getPackageManager()) != null) {
+            startActivity(intent);
+        }
 
-        //we prevent app from crash if the intent has no destination.
-        if (sendIntent.resolveActivity(getActivity().getPackageManager()) != null)
-            startActivity(shareIntent);
+
+//        //share with implicit intent
+//        Intent sendIntent = new Intent(Intent.ACTION_SEND);
+//        sendIntent.putExtra(Intent.EXTRA_TEXT, getReport());
+//        sendIntent.putExtra(Intent.EXTRA_SUBJECT, getString(R.string.crime_report_subject));
+//        sendIntent.setType("text/plain");
+//
+//        Intent shareIntent =
+//                Intent.createChooser(sendIntent, getString(R.string.send_report));
+//
+//        //we prevent app from crash if the intent has no destination.
+//        if (sendIntent.resolveActivity(getActivity().getPackageManager()) != null)
+//            startActivity(shareIntent);
     }
 
     private void selectContact() {
@@ -273,4 +334,5 @@ public class CrimeDetailFragment extends Fragment {
             startActivityForResult(intent, REQUEST_CODE_SELECT_CONTACT);
         }
     }
+
 }
